@@ -1,13 +1,15 @@
 class ChannelsListScreen:
     def __init__(self, app):
         self.app = app
-        self.channels = app.state.channels
+        self.channels = app.state.get_state().get("channels", [])
         app.whisplay_interface.on_press(self._on_press)
         app.whisplay_interface.on_release(self._on_release)
         app.whisplay_interface.on_long_press(self._on_long_press)
         app.whisplay_interface.on_long_release(self._on_long_release)
         app.whisplay_interface.on_double_press(self._on_double_press)
         app.whisplay_interface.on_double_release(self._on_double_release)
+
+        app.state.set_on_change_callback(self._on_app_change)
 
     def _on_press(self):
         pass
@@ -25,7 +27,12 @@ class ChannelsListScreen:
         pass  
     
     def _on_double_release(self):
-        pass    
+        pass
+    
+    def _on_app_change(self, name, value):
+        if name == "_channels":
+            self.channels = value
+            self.display()
 
     def display(self):
         print("Channels List:")

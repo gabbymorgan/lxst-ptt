@@ -1,6 +1,7 @@
 import argparse
 import json
 import os
+import re
 import threading
 import time
 import LXMF
@@ -27,15 +28,14 @@ class App:
         self.lxmf_destination = None
         self.lxmf_router = None
         self.telephone = None
-        self._responses = []
-        self._response_event = threading.Event()
 
         self._init_reticulum(configdir, rnsconfigdir, verbosity)
-        self._init_lxmf(display_name)
+        self._init_lxmf(display_name, whitelist_path)
         self._init_telephone()
         
     def run(self):
         self.should_run = True
+        self.router.navigate("channels_list")
         while self.should_run:
             time.sleep(1)
 
@@ -68,7 +68,8 @@ class App:
                 RNS.LOG_NOTICE,
             )
             
-    def _init_lxmf(self, display_name):
+    def _init_lxmf(self, display_name, whitelist_path):
+        #initialize lxmf and announce destination on network
         self.lxmf_storage_path = os.path.join(self.configdir, "lxmf")
         os.makedirs(self.lxmf_storage_path, exist_ok=True)
         
@@ -83,8 +84,56 @@ class App:
         )
         
         self.lxmf_router.register_delivery_callback(self._lxmf_delivery_callback)
-        
         self.lxmf_destination.announce()
+        
+        # find whitelist file and parse for use
+        self.whitelist_path = whitelist_path
+        if self.whitelist_path is None:
+            candidates = [
+                os.path.join(os.getcwd(), "bridge_whitelist.json"),
+                os.path.join(self.configdir, "bridge_whitelist.json"),
+            ]
+            for p in candidates:
+                if os.path.isfile(p):
+                    self.whitelist_path = p
+                    break
+            if self.whitelist_path is None:
+                self.whitelist_path = candidates[0]
+                
+        if not os.path.isfile(self.whitelist_path):
+            RNS.log(f"bridge_whitelist.json not found at {self.whitelist_path}", level=RNS.LOG_ERROR)
+
+        with open(self.whitelist_path) as f:
+            self.whitelist = json.load(f)
+            
+        if not isinstance(self.whitelist, list):
+            RNS.log("bridge_whitelist.json must contain a list of LXMF addresses", level=RNS.LOG_ERROR)
+
+        # send /channels_json command to nodes on whitelist
+        for destination_address_string in self.whitelist:
+            destination_address_bytes = bytes.fromhex(destination_address_string)
+            destination_identity = RNS.Identity.recall(destination_address_bytes)
+
+            if destination_identity is None:
+                print(f"Could not discover relay {destination_address_string[:16]}...")
+                return
+
+            destination = RNS.Destination( 
+                destination_identity,
+                RNS.Destination.OUT,
+                RNS.Destination.SINGLE,
+                "lxmf",
+                "delivery",
+            )
+            
+            message = LXMF.LXMessage(
+                destination,
+                self.lxmf_destination,
+                "/channels_json",
+                desired_method=LXMF.LXMessage.DIRECT,
+            )
+            
+            self.lxmf_router.handle_outbound(message)
 
     def _init_telephone(self):
         self.telephone = Telephone(self.reticulum_identity)
@@ -101,19 +150,16 @@ class App:
         # checks sender against whitelist using reticulum as source of truth for identities
         content = message.content_as_string().strip()
         print(f"Received LXMF message from {RNS.prettyhexrep(message.source_hash)}: {content}")
-        sender_hex = RNS.hexrep(message.source_hash, delimit=False)
+        if RNS.hexrep(message.source_hash, delimit=False) not in self.whitelist:
+            RNS.log("Message not from node on whitelist. Data discarded.")
+            return
         try:
             data = json.loads(content)
             if isinstance(data, list):
-                for h in data:
-                    if isinstance(h, str) and len(h) in (32, 64):
-                        self._responses.append({
-                            "hash": h,
-                            "relay": sender_hex,
-                        })
+                for list_item in data:
+                    self.state.add_channel(list_item)
         except (json.JSONDecodeError, ValueError):
             pass
-        self._response_event.set()
         
     def _on_call_established(self, remote_identity):
         print(f"Call established with {RNS.prettyhexrep(remote_identity.hash)}")
@@ -140,8 +186,53 @@ class Router:
 
 class AppState:
     def __init__(self):
-        self.channels = []
-        self.current_channel = None
+        self._on_change = None
+        self._channels = []
+        self._current_channel = None
+        
+        
+    def __setattr__(self, name, value):
+        if name != "_on_change" and self._on_change is not None:
+            self._on_change(name, value)
+        super().__setattr__(name, value)
+           
+    def set_on_change_callback(self, callback):
+        self._on_change = callback
+            
+    def add_channel(self, channel):
+        hex_32_or_64_pattern = r"^(?:[0-9a-fA-F]{32}|[0-9a-fA-F]{64})$"
+        if isinstance(channel, str) and re.fullmatch(hex_32_or_64_pattern, channel):
+            if channel in self._channels:
+                RNS.log(f"Channel already exists: {channel}", RNS.LOG_WARNING)
+                return
+            else:
+                print(f"adding channel: {channel}")
+                self._channels = self._channels + [channel]
+        else:
+            RNS.log(f"Invalid channel format: {channel}", RNS.LOG_ERROR)
+            
+    def select_channel(self, channel):
+        if channel in self._channels:
+            self._current_channel = channel
+        else:
+            RNS.log(f"Channel not found: {channel}", RNS.LOG_ERROR)
+        
+    def get_state(self):
+        return {
+            "channels": self._channels,
+            "current_channel": self._current_channel,
+        }
+        
+    def clear_state(self, property_name=None):
+        if property_name is None:
+            self._channels = []
+            self._current_channel = None
+        elif property_name == "channels":
+            self._channels = []
+        elif property_name == "current_channel":
+            self._current_channel = None
+        else:
+            RNS.log(f"Unknown property to clear: {property_name}", RNS.LOG_ERROR)
 
 
 def main():
@@ -154,7 +245,7 @@ def main():
         help="path to alternative Reticulum config directory",
     )
     parser.add_argument(
-        "--whitelist", "-w", default="./bridge_whitelist.json",
+        "--whitelist", "-w",
         help="path to bridge_whitelist.json",
     )
     parser.add_argument(
