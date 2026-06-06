@@ -19,7 +19,7 @@ class App:
     def __init__(self, configdir=None, rnsconfigdir=None, whitelist_path=None,
                  verbosity=0, announce_interval=0, display_name="LXST PTT User"):
         self.should_run = False
-        self.whisplay_interface = WhisplayInterface()
+        self.ui = WhisplayInterface()
         self.state = AppState()
         self.router = Router(self)
         self.reticulum_instance = None
@@ -69,7 +69,7 @@ class App:
             )
             
     def _init_lxmf(self, display_name, whitelist_path):
-        #initialize lxmf and announce destination on network
+        # initialize lxmf and announce destination on network
         self.lxmf_storage_path = os.path.join(self.configdir, "lxmf")
         os.makedirs(self.lxmf_storage_path, exist_ok=True)
         
@@ -137,10 +137,10 @@ class App:
 
     def _init_telephone(self):
         self.telephone = Telephone(self.reticulum_identity)
-        if self.whisplay_interface._wm8960_device:
-            self.telephone.set_speaker(self.whisplay_interface._wm8960_device)
-            self.telephone.set_microphone(self.whisplay_interface._wm8960_device)
-            self.telephone.set_ringer(self.whisplay_interface._wm8960_device)
+        if self.ui._wm8960_device:
+            self.telephone.set_speaker(self.ui._wm8960_device)
+            self.telephone.set_microphone(self.ui._wm8960_device)
+            self.telephone.set_ringer(self.ui._wm8960_device)
         self.telephone.set_established_callback(self._on_call_established)
         self.telephone.set_ended_callback(self._on_call_ended)
         self.telephone.announce()
@@ -187,11 +187,10 @@ class Router:
 class AppState:
     def __init__(self):
         self._on_change = None
-        self._channels = []
-        self._current_channel = None
-        
+        self._channels = []        
         
     def __setattr__(self, name, value):
+        print(name, value)
         if name != "_on_change" and self._on_change is not None:
             self._on_change(name, value)
         super().__setattr__(name, value)
@@ -201,7 +200,7 @@ class AppState:
             
     def add_channel(self, channel):
         hex_32_or_64_pattern = r"^(?:[0-9a-fA-F]{32}|[0-9a-fA-F]{64})$"
-        if isinstance(channel, str) and re.fullmatch(hex_32_or_64_pattern, channel):
+        if isinstance(channel, list) and re.fullmatch(hex_32_or_64_pattern, channel[1]):
             if channel in self._channels:
                 RNS.log(f"Channel already exists: {channel}", RNS.LOG_WARNING)
                 return
@@ -211,26 +210,17 @@ class AppState:
         else:
             RNS.log(f"Invalid channel format: {channel}", RNS.LOG_ERROR)
             
-    def select_channel(self, channel):
-        if channel in self._channels:
-            self._current_channel = channel
-        else:
-            RNS.log(f"Channel not found: {channel}", RNS.LOG_ERROR)
-        
     def get_state(self):
         return {
-            "channels": self._channels,
-            "current_channel": self._current_channel,
+            "channels": self._channels
         }
         
     def clear_state(self, property_name=None):
         if property_name is None:
             self._channels = []
-            self._current_channel = None
+            self._selected_channel = None
         elif property_name == "channels":
             self._channels = []
-        elif property_name == "current_channel":
-            self._current_channel = None
         else:
             RNS.log(f"Unknown property to clear: {property_name}", RNS.LOG_ERROR)
 
