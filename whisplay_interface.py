@@ -9,7 +9,7 @@ from lib.whisplay_client import create_whisplay_hardware
 
 
 class WhisplayInterface:
-    LONG_PRESS_THRESHOLD = 0.5
+    LONG_PRESS_THRESHOLD = 1
     DOUBLE_PRESS_THRESHOLD = 0.3
     
     def __init__(self):

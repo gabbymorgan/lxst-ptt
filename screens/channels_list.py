@@ -1,16 +1,19 @@
 class ChannelsListScreen:
     def __init__(self, app):
         self.app = app
-        self._channels = app.state.get_state().get("channels")
+        self._channels = app.state.channels
         self._selected_channel_index = 0
-        app.ui.on_press(self._on_press)
-        app.ui.on_release(self._on_release)
-        app.ui.on_long_press(self._on_long_press)
-        app.ui.on_long_release(self._on_long_release)
-        app.ui.on_double_press(self._on_double_press)
-        app.ui.on_double_release(self._on_double_release)
-
-        app.state.set_on_change_callback(self._on_app_change)
+        
+    def mount(self):
+        self.app.ui.on_press(self._on_press)
+        self.app.ui.on_release(self._on_release)
+        self.app.ui.on_long_press(self._on_long_press)
+        self.app.ui.on_long_release(self._on_long_release)
+        self.app.ui.on_double_press(self._on_double_press)
+        self.app.ui.on_double_release(self._on_double_release)
+        self.app.state.set_on_change_callback(self._on_app_change)
+        
+        self.display()
 
     def _on_press(self):
         pass
@@ -22,14 +25,15 @@ class ChannelsListScreen:
         pass
     
     def _on_long_release(self):
-        pass
+        self.app.state.set_current_channel(self._channels[self._selected_channel_index])
+        self.app.router.navigate("channel") 
     
     def _on_double_press(self):
-        pass  
+        pass
     
     def _on_double_release(self):
         pass
-    
+
     def _on_app_change(self, name, value):
         if name == "_channels":
             self._channels = value

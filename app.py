@@ -180,17 +180,25 @@ class Router:
     def navigate(self, screen_name):
         if screen_name in self.screens:
             self.current_screen = self.screens[screen_name]
-            self.current_screen.display()
+            self.current_screen.mount()
         else:
             print(f"Screen '{screen_name}' not found.")
 
 class AppState:
     def __init__(self):
         self._on_change = None
-        self._channels = []        
+        self._channels = []       
+        self._current_channel = None
+        
+    @property
+    def channels(self):
+        return self._channels
+    
+    @property
+    def current_channel(self):
+        return self._current_channel
         
     def __setattr__(self, name, value):
-        print(name, value)
         if name != "_on_change" and self._on_change is not None:
             self._on_change(name, value)
         super().__setattr__(name, value)
@@ -210,17 +218,17 @@ class AppState:
         else:
             RNS.log(f"Invalid channel format: {channel}", RNS.LOG_ERROR)
             
-    def get_state(self):
-        return {
-            "channels": self._channels
-        }
+    def set_current_channel(self, channel):
+        self._current_channel = channel
         
     def clear_state(self, property_name=None):
         if property_name is None:
             self._channels = []
-            self._selected_channel = None
+            self._current_channel = None
         elif property_name == "channels":
             self._channels = []
+        elif property_name == "current_channel":
+            self.current_channel = None
         else:
             RNS.log(f"Unknown property to clear: {property_name}", RNS.LOG_ERROR)
 
