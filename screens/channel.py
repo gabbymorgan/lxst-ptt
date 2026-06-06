@@ -2,7 +2,7 @@ from enum import StrEnum, auto
 
 import RNS
 
-class ChannelState(StrEnum):
+class ChannelStateEnum(StrEnum):
     READY = auto()
     CONNECTING = auto()
     CONNECTED = auto()
@@ -12,7 +12,7 @@ class ChannelState(StrEnum):
 class ChannelScreen:    
     def __init__(self, app):
         self.app = app
-        self._phone_state = ChannelState.READY
+        self._phone_state = ChannelStateEnum.READY
         self.channel_hash = None
         self.channel_name = None
         self._ptt_enabled = False
@@ -76,13 +76,13 @@ class ChannelScreen:
         pass
     
     def _on_call_ringing(self, identity):
-        self.phone_state = ChannelState.CONNECTING
+        self.phone_state = ChannelStateEnum.CONNECTING
         
     def _on_call_established(self, identity):
-        self.phone_state = ChannelState.CONNECTED
+        self.phone_state = ChannelStateEnum.CONNECTED
         
     def _on_call_ended(self, identity):
-        self.phone_state = ChannelState.ENDED
+        self.phone_state = ChannelStateEnum.ENDED
 
 
     def display(self):
@@ -90,7 +90,7 @@ class ChannelScreen:
             name, hash = self.app.state.current_channel
             title = name
             body_lines = [self.phone_state, "PTT: Off"]
-            footer = "short: mode | long: talk"
+            footer = "short: mode | dbl: end"
             self.app.ui.render(title, body_lines, accent=(60, 150, 255), footer=footer)
         except Exception as e:
             print(e)

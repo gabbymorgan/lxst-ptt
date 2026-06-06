@@ -2,6 +2,7 @@ class ChannelsListScreen:
     def __init__(self, app):
         self.app = app
         self._channels = app.state.channels
+        self._discovery_state = app.state.discovery_state
         self._selected_channel_index = 0
         
     def mount(self):
@@ -35,13 +36,16 @@ class ChannelsListScreen:
         pass
 
     def _on_app_change(self, name, value):
+        print(f"{name}: {value}")
         if name == "_channels":
             self._channels = value
-            self.display()
+        if name == "_discovery_state":
+            self._discovery_state = value
+        self.display()
 
     def display(self):
         title = "Channels"
-        body_lines = []
+        body_lines = [self._discovery_state]
         footer = "short: scroll | long: call"
         if self._channels and len(self._channels) > 0:
             selected_channel = self._channels[self._selected_channel_index]

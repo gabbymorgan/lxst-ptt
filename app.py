@@ -7,6 +7,7 @@ import time
 import LXMF
 import RNS
 
+from enum import StrEnum, auto
 from PIL import Image, ImageDraw, ImageFont
 from whisplay_interface import WhisplayInterface
 from screens.channels_list import ChannelsListScreen
@@ -29,17 +30,18 @@ class App:
         self.lxmf_router = None
         self.telephone = None
 
+        self.router.navigate("channels_list")
         self._init_reticulum(configdir, rnsconfigdir, verbosity)
         self._init_lxmf(display_name, whitelist_path)
         self._init_telephone()
         
     def run(self):
         self.should_run = True
-        self.router.navigate("channels_list")
         while self.should_run:
             time.sleep(1)
 
     def _init_reticulum(self, configdir, rnsconfigdir, verbosity):
+        self.state.set_discovery_state(AppStateEnum.INITIALIZING_RETICULUM)
         self.reticulum = RNS.Reticulum(
             configdir=rnsconfigdir, loglevel=3 + verbosity)
         
@@ -69,6 +71,7 @@ class App:
             )
             
     def _init_lxmf(self, display_name, whitelist_path):
+        self.state.set_discovery_state(AppStateEnum.INITIALIZING_LXMF)
         # initialize lxmf and announce destination on network
         self.lxmf_storage_path = os.path.join(self.configdir, "lxmf")
         os.makedirs(self.lxmf_storage_path, exist_ok=True)
@@ -110,9 +113,11 @@ class App:
             RNS.log("bridge_whitelist.json must contain a list of LXMF addresses", level=RNS.LOG_ERROR)
 
         # send /channels_json command to nodes on whitelist
+        self.state.set_discovery_state(AppStateEnum.ASKING)
         for destination_address_string in self.whitelist:
             destination_address_bytes = bytes.fromhex(destination_address_string)
             destination_identity = RNS.Identity.recall(destination_address_bytes)
+            
 
             if destination_identity is None:
                 print(f"Could not discover relay {destination_address_string[:16]}...")
@@ -134,6 +139,8 @@ class App:
             )
             
             self.lxmf_router.handle_outbound(message)
+            message.register_failed_callback(self._lxmf_failed_callback)
+        self.state.set_discovery_state(AppStateEnum.AWAITING_REPONSE)
 
     def _init_telephone(self):
         self.telephone = Telephone(self.reticulum_identity)
@@ -158,8 +165,12 @@ class App:
             if isinstance(data, list):
                 for list_item in data:
                     self.state.add_channel(list_item)
+                self.state.set_discovery_state(AppStateEnum.CHANNELS_LOADED)
         except (json.JSONDecodeError, ValueError):
             pass
+        
+    def _lxmf_failed_callback(self, message):
+        self.state.set_discovery_state(AppStateEnum.CHANNELS_FAILED)
         
     def _on_call_established(self, remote_identity):
         print(f"Call established with {RNS.prettyhexrep(remote_identity.hash)}")
@@ -184,11 +195,27 @@ class Router:
         else:
             print(f"Screen '{screen_name}' not found.")
 
+class AppStateEnum(StrEnum):
+    READY = auto()
+    INITIALIZING_RETICULUM = auto()
+    INITIALIZING_LXMF = auto()
+    ASKING = auto()
+    AWAITING_REPONSE = auto()
+    CHANNELS_LOADED = auto()
+    CHANNELS_FAILED = auto()
+
 class AppState:
     def __init__(self):
         self._on_change = None
         self._channels = []       
         self._current_channel = None
+        self._discovery_state = AppStateEnum.READY
+        
+    def __setattr__(self, name, value):
+        # attach _on_change callback to all attributes)
+        if name != "_on_change" and self._on_change is not None:
+            self._on_change(name, value)
+        super().__setattr__(name, value)
         
     @property
     def channels(self):
@@ -197,11 +224,10 @@ class AppState:
     @property
     def current_channel(self):
         return self._current_channel
-        
-    def __setattr__(self, name, value):
-        if name != "_on_change" and self._on_change is not None:
-            self._on_change(name, value)
-        super().__setattr__(name, value)
+    
+    @property
+    def discovery_state(self):
+        return self._discovery_state
            
     def set_on_change_callback(self, callback):
         self._on_change = callback
@@ -221,14 +247,19 @@ class AppState:
     def set_current_channel(self, channel):
         self._current_channel = channel
         
+    def set_discovery_state(self, discovery_state):
+        self._discovery_state = discovery_state
+        
     def clear_state(self, property_name=None):
         if property_name is None:
-            self._channels = []
-            self._current_channel = None
+            self.channels = []
+            self.current_channel = None
         elif property_name == "channels":
-            self._channels = []
+            self.channels = []
         elif property_name == "current_channel":
             self.current_channel = None
+        elif property_name == "discovery_state":
+            self.discovery_state = AppStateEnum.READY
         else:
             RNS.log(f"Unknown property to clear: {property_name}", RNS.LOG_ERROR)
 
