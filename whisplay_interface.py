@@ -124,7 +124,6 @@ class WhisplayInterface:
             RNS.log(f"ERROR: Failed to set volume: {e}", RNS.LOG_ERROR)
 
     def render(self, title, body_lines, accent=(60, 150, 255), footer=""):
-        print(body_lines)
         BODY_FONT_SIZE = 20
         width, height = self.board.LCD_WIDTH, self.board.LCD_HEIGHT
         image = Image.new("RGB", (width, height), (11, 16, 24))
