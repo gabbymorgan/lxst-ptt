@@ -144,10 +144,6 @@ class App:
 
     def _init_telephone(self):
         self.telephone = Telephone(self.reticulum_identity)
-        if self.ui._wm8960_device:
-            self.telephone.set_speaker(self.ui._wm8960_device)
-            self.telephone.set_microphone(self.ui._wm8960_device)
-            self.telephone.set_ringer(self.ui._wm8960_device)
         self.telephone.set_established_callback(self._on_call_established)
         self.telephone.set_ended_callback(self._on_call_ended)
         self.telephone.announce()
