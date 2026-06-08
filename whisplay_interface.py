@@ -122,6 +122,19 @@ class WhisplayInterface:
                             'Capture', str(mic)], check=False, capture_output=True)
         except Exception as e:
             RNS.log(f"ERROR: Failed to set volume: {e}", RNS.LOG_ERROR)
+            
+    def set_mic_muted(self, muted):
+        if self._wm8960_device is None:
+            return
+        card = self._wm8960_device.split(",")[0].split(":")[-1]
+        state = "off" if muted else "on"
+        try:
+            subprocess.run(
+                ["amixer", "-c", card, "cset", "name='Capture Switch'", state],
+                check=False, capture_output=True, timeout=2,
+            )
+        except Exception as e:
+            print(e)
 
     def render(self, title, body_lines, accent=(60, 150, 255), footer=""):
         BODY_FONT_SIZE = 20

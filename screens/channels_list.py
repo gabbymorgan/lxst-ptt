@@ -47,9 +47,8 @@ class ChannelsListScreen:
         title = "Channels"
         body_lines = [self._discovery_state]
         footer = "short: scroll | long: call"
-        if self._channels and len(self._channels) > 0:
-            selected_channel = self._channels[self._selected_channel_index]
-            body_lines = [(f"{channel[0]}_{channel[1][-6:]}", selected_channel == channel) for channel in self._channels]
+        for index, channel in enumerate(self._channels):
+            body_lines.append((f"{channel[0]}_{channel[1][-6:]}", index == self._selected_channel_index))
         self.app.ui.render(title, body_lines, accent=(60, 150, 255), footer=footer)
         
     def next_channel(self):

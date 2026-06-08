@@ -2,13 +2,11 @@ import argparse
 import json
 import os
 import re
-import threading
 import time
 import LXMF
 import RNS
 
 from enum import StrEnum, auto
-from PIL import Image, ImageDraw, ImageFont
 from whisplay_interface import WhisplayInterface
 from screens.channels_list import ChannelsListScreen
 from screens.channel import ChannelScreen
@@ -166,7 +164,7 @@ class App:
             pass
         
     def _lxmf_failed_callback(self, message):
-        self.state.set_discovery_state(AppStateEnum.CHANNELS_FAILED)
+        self.state.set_discovery_state(AppStateEnum.SOME_CHANNELS_FAILED)
         
     def _on_call_established(self, remote_identity):
         print(f"Call established with {RNS.prettyhexrep(remote_identity.hash)}")
@@ -198,7 +196,7 @@ class AppStateEnum(StrEnum):
     ASKING = auto()
     AWAITING_REPONSE = auto()
     CHANNELS_LOADED = auto()
-    CHANNELS_FAILED = auto()
+    SOME_CHANNELS_FAILED = auto()
 
 class AppState:
     def __init__(self):
